@@ -1,0 +1,448 @@
+#########################################################################################
+#
+#  Raspberry Pi Final Project
+#
+#  Constellation Nonograms
+#
+#  By:
+#  Jalen Senones
+#  Carmen Nicholson
+#  Ben Doughty
+#
+#  Github: https://github.com/btdoughty/finalpi/tree/master
+#
+#########################################################################################
+
+#############################################################################################################################################
+#
+#  This code makes use of the Adafruit_LED_Backpack library
+#
+#  Instructions for installation come from https://learn.adafruit.com/led-backpack-displays-on-raspberry-pi-and-beaglebone-black/usage
+#
+#  Raspberry Pi must have internet access
+#
+#  Type the following in Pi's terminal:
+#
+#  sudo apt-get update
+#  sudo apt-get install build-essential python-dev python-smbus python-imaging git
+#
+#  git clone https://github.com/adafruit/Adafruit_Python_LED_Backpack.git
+#  cd Adafruit_Python_LED_Backpack
+#  sudo pythonsetup.py install
+#
+#############################################################################################################################################
+
+# these libraries are imported to use with displaying to the LED Matrix
+from Adafruit_LED_Backpack import Matrix8x8
+import time
+
+# these libraries are importe to use with the base game
+import Tkinter as tk
+from random import randint
+
+# this creates the display instance and initializes it, using the Adafruit_LED_Backpack
+display = Matrix8x8.Matrix8x8()
+display.begin()
+# this clears the display in preparation for use
+display.clear()
+
+# The starting point for the grid code comes from stackoverflow user fhdrsdg at
+# http://stackoverflow.com/questions/26988204/using-2d-array-to-create-clickable-tkinter-canvas
+
+# sets the number of rows and columns in the game
+ROWS = 8
+COLS = 16
+
+# creates an array to store the information on whether or not each cell has been clicked
+# each item in the array represents a row, each item within each row represents a column
+# Ex. [0][1] would represent Row 1 (because the array starts with index 0) and Column 2
+cells = [["empty" for i in range(COLS)] for i in range(ROWS)]
+
+# creates a solution array, which will be used to create the puzzle and to match agains the player's answers
+solution = [["empty" for i in range(COLS)] for i in range(ROWS)]
+
+# creates an array which will hold the player's input to match against the solution
+playerinput = [["empty" for i in range(COLS)] for i in range(ROWS)]
+
+# sets the window size and border
+bordersize = 80
+windowheight = 480
+windowwidth = 800
+
+# this method allows clicks to fill grid blocks
+def click(event):
+    # sets the size of each column and row
+    col_width = 40
+    row_height = 40
+    
+    # forces the grid to begin and end a distance from the edge of the window equal to the cell size (width & height)
+    # ***question about this:  this does not make sense, it should be cols-1 and rows-1, but that does not work correctly.  why??***
+    if event.x >= bordersize and event.x <= windowwidth-bordersize and event.y >= bordersize and event.y <= windowheight-bordersize:
+            
+        # The event.x and event.y return the coordinates of the cursor
+        # By finding the floor of the coordinates divided by their respective boundary size,
+        # we can define which column and row have been clicked
+        # 1 is subtracted to correct for the empty border area
+        col = (event.x - bordersize)//(col_width)
+        row = (event.y - bordersize)//(row_height)
+
+     
+        # fills in the cell when it is clicked
+        if cells[row][col] == "empty":
+            cells[row][col] = gamewindow.create_rectangle((col)*col_width + bordersize, (row)*row_height + bordersize, (col+1)*col_width + bordersize, (row+1)*row_height + bordersize, fill="white")
+        # clears a filled tile if it is clicked
+        else:
+            gamewindow.delete(cells[row][col])
+            cells[row][col] = "empty"
+
+# creates the window and the mouse click event binding
+root = tk.Tk()
+gamewindow = tk.Canvas(root, width=windowwidth, height=windowheight, borderwidth=5, background='black')
+gamewindow.pack()
+gamewindow.bind("<Button-1>", click)
+# creates a title at the top
+gamewindow.create_text(400, 25, text="Constellation Nonograms", fill="white")
+
+# draws a grid for the game space
+for i in range (COLS):
+    for j in range (ROWS):
+        gamewindow.create_rectangle(bordersize + 40*i,bordersize + 40*j,bordersize + 40*(i+1),bordersize + 40*(j+1), outline="white")
+
+
+
+# generates clues from the solution array and labels the rows for the nonogram
+def startpuzzle():
+
+    # Sets nonogram row and column clues
+    colclues = []
+    rowclues = []
+    
+    # generates clues from the solution array
+    for i in range (ROWS):
+        tempclue = []
+        counter = 0
+        for j in range (COLS):
+            if solution[i][j] == "1":
+                counter += 1
+                if j == COLS-1:
+                    tempclue.append(counter)
+            elif solution[i][j] == "0" and counter != 0:
+                tempclue.append(counter)
+                counter = 0
+        rowclues.append(tempclue)
+
+    for i in range (COLS):
+        tempclue = []
+        counter = 0
+        for j in range (ROWS):
+            if solution[j][i] == "1":
+                counter += 1
+                if j == ROWS-1:
+                    tempclue.append(counter)
+            elif solution[j][i] == "0" and counter != 0:
+                tempclue.append(counter)
+                counter = 0
+        colclues.append(tempclue)
+
+# labels the rows and columns with clues                
+# for clues with multiple elements (ex. 1,2,2 on same row), automatically spaces each clue (onto a new line in a column or adds spacing in a row)                    
+# the labels are all given the tag "labels" so that they can be controlled as a group (deleted later on)
+    for i in range (COLS):
+        for k in range (len(colclues[i])):
+            gamewindow.create_text(40*(i+1.5) + (bordersize - 40), (bordersize - 35) + (13 * (k)), text=colclues[i][k], tag = "labels", fill="white")
+        
+    for j in range (ROWS):
+        for l in range (len(rowclues[j])):
+            gamewindow.create_text((bordersize - 40) + (7 * (l)), 40*(j+1.5) + (bordersize - 40), text=rowclues[j][l], tag = "labels", fill="white")
+
+
+###################################################
+#  Methods for Buttons
+###################################################
+
+def submitanswer():
+    # this uses the same method as "save puzzle" below to write the player's current input onto the playerinput array
+    for i in range(ROWS):
+        for j in range(COLS):
+            if cells[i][j] == "empty":
+                playerinput[i][j] = "0"
+            elif cells[i][j] != "empty":
+                playerinput[i][j] = "1"
+
+    # this tests if the solution matches the player input and gives an appropriate message    
+    # creates a popup window to give player their results
+    popupwindow = tk.Toplevel()
+    if playerinput == solution:
+        message = tk.Label(popupwindow,text="YOU WIN!!!!")
+    else:
+        message = tk.Label(popupwindow,text="No.")
+    message.pack()
+
+    # closes the popup
+    def cleanup():
+        popupwindow.destroy()
+
+    # this creates the button which will call the cleanup function
+    if playerinput == solution:
+        okbutton = tk.Button(popupwindow, text = "YAY!", command = cleanup)
+    else:
+        okbutton = tk.Button(popupwindow, text = "Doh!", command = cleanup)
+    okbutton.pack()
+
+    # this displays the 2 images on the 8x8 LED Matrix using the Adafruit_LED_Backpack library upon successful puzzle completion
+    if playerinput == solution:
+        # the initialization code comes from https://github.com/adafruit/Adafruit_Python_LED_Backpack/blob/master/Adafruit_LED_Backpack/Matrix8x8.py
+        # the images will loop 5 times
+        for p in range (5):
+            # all LEDs are reset
+            display.clear()
+                
+            # for each image, the "1's" in the solution are converted to coordinates which can then be input into the set_pixel code
+            # to light LEDs on the Matrix
+            # coordinates are in the form (j, i-8) because the display sees the columns (j) the same as the canvas, numbered from top to bottom
+            # but the display sees the rows (i) the opposite, numbered from bottom to top
+            for i in range(ROWS):
+                for j in range(8):
+                    if solution[i][j] == "1":
+                        display.set_pixel(8-i,ji,1)
+
+            # displays the input pixels
+            display.write_display()
+            # a delay is set between displaying images
+            time.sleep(2)
+
+            # all LEDs are reset
+            display.clear()
+
+            # image2 is displayed in the same fashion as image1
+            # for image2, the columns to be read are offset by 8
+            # coordinates are in the form (j, i-8) because the display sees the columns (j) the same as the canvas, numbered from top to bottom
+            # but the display sees the rows (i) the opposite, numbered from bottom to top
+            for i in range(ROWS):
+                for j in range(8):
+                    if solution[i][j+8] =="1":
+                        display.set_pixel(8-i,j,1)
+            # displays the input pixels
+            display.write_display()
+            # a delay is set between displaying images
+            time.sleep(2)
+            
+    
+# this resets all of the tiles on the game board by deleting the array values and replacing them with "empty"
+def resetgame():
+    
+    for i in range (ROWS):
+        for j in range (COLS):
+            gamewindow.delete(cells[i][j])
+            cells[i][j] = "empty"
+
+    # resets the solution
+    solution = [["empty" for i in range(COLS)] for i in range(ROWS)]
+
+    # clears the labels
+    gamewindow.delete("labels")
+
+    # resets the cheat counter
+    global cheatcounter
+    cheatcounter = 0
+
+    # resets the LED display
+    display.clear()
+    
+
+# saves the puzzle currently shaded on the grid
+def savepuzzle():
+
+    # creates a popup window to ask for filename input
+    popupwindow = tk.Toplevel()
+    instructions = tk.Label(popupwindow,text="Enter Save Name")
+    instructions.pack()
+    nameentry = tk.Entry(popupwindow)
+    nameentry.pack()
+
+    # takes input, creates or overwrites file with input name, closes the popup
+    def cleanup():
+        # retrieves the name from the entry box
+        filename = nameentry.get()
+        
+        # opens a a file for writing or creates a new one if one does not already exist
+        savedpuzzle = open(filename, "w")
+    
+        # converts the cell array to a string and writes the cells array onto the file
+        cellstring = ""
+
+        for i in range(ROWS):
+            for j in range(COLS):
+                if cells[i][j] == "empty":
+                    cellstring = cellstring + "0"
+                elif cells[i][j] != "empty":
+                    cellstring = cellstring + "1"
+        
+        savedpuzzle.write(cellstring)
+
+        # closes the file
+        savedpuzzle.close()
+
+        # closes the popup
+        popupwindow.destroy()
+
+    # this creates the button which will call the cleanup function
+    submitname = tk.Button(popupwindow, text = "Ok", command = cleanup)
+    submitname.pack()
+
+
+# loads the puzzle with the input name    
+def loadpuzzle():
+
+    #resets the game
+    resetgame()
+
+    # creates a popup window to ask for filename input
+    popupwindow = tk.Toplevel()
+    instructions = tk.Label(popupwindow,text="Enter Filename")
+    instructions.pack()
+    nameentry = tk.Entry(popupwindow)
+    nameentry.pack()
+
+    # takes input, opens file with input name, generates the puzzle
+    def cleanup():
+        # retrieves the name from the entry box
+        filename = nameentry.get()
+        
+        # opens a a file for reading
+        savedpuzzle = open(filename, "r")
+    
+        # reads the saved file and saves the information as a temporary variable
+        filestring = savedpuzzle.read();
+
+        # converts the 0's and 1's in the file to an array in the format of the solution array
+        strindex = 0
+        for i in range(ROWS):
+            for j in range(COLS):
+                solution[i][j] = filestring[strindex]
+                strindex += 1        
+
+        # closes the file
+        savedpuzzle.close()
+
+        # closes the popup
+        popupwindow.destroy()
+
+        # starts the puzzle
+        startpuzzle()
+
+    # this creates the button which will call the cleanup function
+    submitname = tk.Button(popupwindow, text = "Ok", command = cleanup)
+    submitname.pack()
+
+# this code creates a random game by combining 2 of the 8 CyberStorm team constellations, side by side
+def newrandomgame():
+
+    # resets the game
+    resetgame()
+    
+    # create an array of constellation file names
+    constellationarray = ["canesventici", "chameleon", "crater", "canismajor", "draco", "phoenix", "taurus", "vulpecula"]
+    
+    # sets the first image by choosing from the array randomly
+    image1 = constellationarray[randint(0,7)]
+    
+    # sets the second image by choosing from the array randomly
+    image2 = constellationarray[randint(0,7)]
+    
+    # changes image2 if it is the same as image1 until it is something different
+    while image2 == image1:
+        image2 = constellationarray[randint(0,7)]
+
+    # opens and reads both files
+    picture1 = open(image1, "r")
+    picture2 = open(image2, "r")
+
+    picture1code = picture1.read();
+    picture2code = picture2.read();
+
+    # as in "load" method, converts the 0's and 1's in the first file to an array in the format of the solution array
+    strindex = 0
+    for i in range(ROWS):
+        for j in range(COLS):
+            solution[i][j] = picture1code[strindex]
+            strindex += 1
+            
+    # as in "load" method, converts the 0's and 1's in the first file to an array in the format of the solution array
+    # the catch for Image 2 is that the picture must be shifted to the right by 8 columns
+    # this is achieved by first converting it to an array like "solution", called "solution2"
+    # and then copying only columns 9-16 to "solution"
+    strindex = 0
+    # initialize solution2 with "empty"
+    solution2 = [["empty" for i in range(COLS)] for i in range(ROWS)]
+    for i in range(ROWS):
+        for j in range(COLS):
+            solution2[i][j] = picture2code[strindex]
+            strindex += 1
+    # now solution2 is written to solution, shifted 8 columns over
+    for i in range (ROWS):
+        for j in range (8,16):
+            solution[i][j] = solution2[i][j-8]
+
+    # starts the puzzle
+    startpuzzle()
+
+    # since the puzzles are very difficult, the names of the constellations are printed below their pictures
+    # first the filenames are associated with more pleasing strings using a dictionary
+    namedictionary = {"canesventici": "Canes Ventici", "chameleon":"Chameleon", "crater":"Crater", "canismajor":"Canis Major", "draco":"Draco", "phoenix":"Phoenix", "taurus":"Taurus", "vulpecula":"Vulpecula"}
+    # then the text is printed using the new string in the dictionary, with the filename as index
+    gamewindow.create_text(240, 410, text=namedictionary[image1], tag = "labels", fill="white")
+    gamewindow.create_text(560, 410, text=namedictionary[image2], tag = "labels", fill="white")
+
+def helpm():
+    popupwindow = tk.Toplevel()
+    message = tk.Label(popupwindow,wraplength=500,text="To solve a nonogram and reveal the correct image, you will need to fill in the grid based on the clues located at the top of the columns and to the left of the rows.  The clues indicate the number of consecutive, filled squares in the row or column.  If there is more than one number, then the sets of consecutive, filled squares are separated by one or more empty squares.  HINT: Begin by looking at the rows/columns with the largest numbers.  If you consider all of the possibilities for filling these rows, there is often some overlap, which means you can guarantee the overlapping squares will be filled.  For example, a clue of 3 on a row made up of 5 squares would guarantee the middle square is filled.")
+    message.pack()
+
+    # closes the popup
+    def cleanup():
+        popupwindow.destroy()
+
+    # this creates the button which will call the cleanup function
+    okbutton = tk.Button(popupwindow, text = "OK", command = cleanup)
+    okbutton.pack()
+
+# this establishes a cheat counter, which serves to allow the cheat function to work multiple times and also track the number of times
+# a player cheats
+cheatcounter = 0
+def cheat():
+    global cheatcounter
+    # this prevents an error when no more cheating can be done
+    if cheatcounter < 8:
+        # fills in the squares on an entire row which match the solution
+        # starts with the first row, each consecutive click of the "cheat" button reveals another row
+        for i in range (COLS):
+            if solution[cheatcounter][i] == "1":
+                cells[cheatcounter][i] = gamewindow.create_rectangle((i)*40 + bordersize, (cheatcounter)*40 + bordersize, (i+1)*40 + bordersize, (cheatcounter+1)*40 + bordersize, fill="white")
+    cheatcounter += 1        
+
+# creates the buttons used in the program
+answer = tk.Button(gamewindow, text="Submit Answer", command = submitanswer)
+answer.place(relx= .9, rely= .9, anchor="c")
+
+reset = tk.Button(gamewindow, text="Reset Game", command = resetgame)
+reset.place(relx= .72, rely= .9, anchor="c")
+
+save = tk.Button(gamewindow, text="Save as New Puzzle", command = savepuzzle)
+save.place(relx= .2925, rely= .96, anchor="c")
+
+load = tk.Button(gamewindow, text="Load Saved Puzzle", command = loadpuzzle)
+load.place(relx= .113, rely= .96, anchor="c")
+
+random = tk.Button(gamewindow, text="New Game: Random Constellation Puzzle", command = newrandomgame)
+random.place(relx= .2, rely= .9, anchor="c")
+
+helpme = tk.Button(gamewindow, text="   ?   ", command = helpm)
+helpme.place(relx= .95, rely= .1, anchor="c")
+
+hintcheat = tk.Button(gamewindow, text="Cheat", command = cheat)
+hintcheat.place(relx= .95, rely= .16, anchor="c")
+
+
+
+root.mainloop()
